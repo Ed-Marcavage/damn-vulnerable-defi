@@ -7,6 +7,7 @@ import {IERC3156FlashBorrower} from "@openzeppelin/contracts/interfaces/IERC3156
 import {FlashLoanReceiver} from "./FlashLoanReceiver.sol";
 import {Multicall} from "./Multicall.sol";
 import {WETH} from "solmate/tokens/WETH.sol";
+import {console} from "forge-std/Test.sol";
 
 contract NaiveReceiverPool is Multicall, IERC3156FlashLender {
     uint256 private constant FIXED_FEE = 1e18; // not the cheapest flash loan
@@ -83,6 +84,7 @@ contract NaiveReceiverPool is Multicall, IERC3156FlashLender {
     // is this how I can take money from the pool?
     function withdraw(uint256 amount, address payable receiver) external {
         // Reduce deposits
+        console.log("_msgSender Address:", _msgSender());
         deposits[_msgSender()] -= amount;
         totalDeposits -= amount;
 
@@ -104,9 +106,16 @@ contract NaiveReceiverPool is Multicall, IERC3156FlashLender {
     function _msgSender() internal view override returns (address) {
         // @audit looks suspicious
         if (msg.sender == trustedForwarder && msg.data.length >= 20) {
+            console.log("here");
+            console.logBytes(msg.data);
+            console.log(
+                "bytes20:",
+                address(bytes20(msg.data[msg.data.length - 20:]))
+            );
             return address(bytes20(msg.data[msg.data.length - 20:]));
         } else {
             return super._msgSender();
         }
     }
 }
+//0x00f714ce0000000000000000000000000000000000000000000000008ac7230489e8000000000000000000000000000044e97af4418b7a17aabd8090bea0a471a366305c0000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000000044e97af4418b7a17aabd8090bea0a471a366305c

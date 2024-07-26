@@ -63,9 +63,6 @@ contract BasicForwarder is EIP712 {
             signature
         );
 
-        console.log("Contract recovered signer:", signer);
-        console.log("Expected signer (request.from):", request.from);
-
         if (signer != request.from) revert InvalidSigner();
     }
 
@@ -94,7 +91,7 @@ contract BasicForwarder is EIP712 {
             ) // don't copy returndata
             gasLeft := gas()
         }
-
+        //protection against gas griefing attacks
         if (gasLeft < request.gas / 63) {
             assembly {
                 invalid()
