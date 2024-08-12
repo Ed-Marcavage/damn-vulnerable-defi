@@ -106,16 +106,10 @@ contract NaiveReceiverPool is Multicall, IERC3156FlashLender {
     function _msgSender() internal view override returns (address) {
         // @audit looks suspicious
         if (msg.sender == trustedForwarder && msg.data.length >= 20) {
-            console.log("here");
-            console.logBytes(msg.data);
-            console.log(
-                "bytes20:",
-                address(bytes20(msg.data[msg.data.length - 20:]))
-            );
             return address(bytes20(msg.data[msg.data.length - 20:]));
         } else {
+            // say I send from meta tx, but ^ cond isn't met
             return super._msgSender();
         }
     }
 }
-//0x00f714ce0000000000000000000000000000000000000000000000008ac7230489e8000000000000000000000000000044e97af4418b7a17aabd8090bea0a471a366305c0000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000000044e97af4418b7a17aabd8090bea0a471a366305c

@@ -37,6 +37,7 @@ contract SideEntranceLenderPool {
 
         IFlashLoanEtherReceiver(msg.sender).execute{value: amount}();
 
+        // Req - bal needs to be the same
         if (address(this).balance < balanceBefore) {
             revert RepayFailed();
         }
