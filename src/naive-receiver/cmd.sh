@@ -1,0 +1,1 @@
+slither src/naive-receiver/FlashLoanReceiver.sol --foundry-compile-all --exclude-dependencies --exclude-low --exclude-informational

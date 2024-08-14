@@ -1,0 +1,1 @@
+slither src/truster/TrusterLenderPool.sol --foundry-compile-all --exclude-dependencies --exclude-low --exclude-informational

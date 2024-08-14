@@ -3,12 +3,22 @@
 pragma solidity =0.8.25;
 
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
+import {Test, console} from "forge-std/Test.sol";
 
 interface IFlashLoanEtherReceiver {
     function execute() external payable;
 }
 
 contract SideEntranceLenderPool {
+    // bool private flashLoanLock;
+
+    // modifier noReentrancy() {
+    //     require(!flashLoanLock, "Reentrant call");
+    //     flashLoanLock = true;
+    //     _;
+    //     flashLoanLock = false;
+    // }
+
     mapping(address => uint256) public balances;
 
     error RepayFailed();
@@ -17,6 +27,7 @@ contract SideEntranceLenderPool {
     event Withdraw(address indexed who, uint256 amount);
 
     function deposit() external payable {
+        // if (flashLoanLock) revert FlashLoanInProgress();
         unchecked {
             balances[msg.sender] += msg.value;
         }
@@ -33,11 +44,11 @@ contract SideEntranceLenderPool {
     }
 
     function flashLoan(uint256 amount) external {
+        //noReentrancy
         uint256 balanceBefore = address(this).balance;
 
         IFlashLoanEtherReceiver(msg.sender).execute{value: amount}();
 
-        // Req - bal needs to be the same
         if (address(this).balance < balanceBefore) {
             revert RepayFailed();
         }
