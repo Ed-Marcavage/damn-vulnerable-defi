@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Damn Vulnerable DeFi v4 (https://damnvulnerabledefi.xyz)
 pragma solidity =0.8.25;
+import {Test, console} from "forge-std/Test.sol";
 
 import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
@@ -79,8 +80,8 @@ contract TheRewarderDistributor {
         if (distributions[token].remaining != 0) revert StillDistributing();
 
         // Updates the distribution data
-        distributions[token].remaining = amount;
-        uint256 batchNumber = distributions[token].nextBatchNumber;
+        distributions[token].remaining = amount; // 10 DVT
+        uint256 batchNumber = distributions[token].nextBatchNumber; //0
         distributions[token].roots[batchNumber] = newRoot;
         distributions[token].nextBatchNumber++;
 
@@ -108,6 +109,7 @@ contract TheRewarderDistributor {
 
     // Allow claiming rewards of multiple tokens in a single transaction
     function claimRewards(
+        // batchNumber, amount, tokenIndex, proof
         Claim[] memory inputClaims,
         IERC20[] memory inputTokens
     ) external {
@@ -119,40 +121,52 @@ contract TheRewarderDistributor {
         for (uint256 i = 0; i < inputClaims.length; i++) {
             inputClaim = inputClaims[i];
 
-            uint256 wordPosition = inputClaim.batchNumber / 256;
-            uint256 bitPosition = inputClaim.batchNumber % 256;
+            // Calculate the word and bit position for the claim in the bitmap
+            uint256 wordPosition = inputClaim.batchNumber / 256; // 0
+            uint256 bitPosition = inputClaim.batchNumber % 256; // 0
 
-            // Handles claims for different tokens
+            // Check if this claim is for a different token than the previous one
             if (token != inputTokens[inputClaim.tokenIndex]) {
-                // if token is not the first token
+                // If this isn't the first token (token address is not zero)
                 if (address(token) != address(0)) {
+                    // Try to set the claims for the previous token
                     if (!_setClaimed(token, amount, wordPosition, bitsSet))
                         revert AlreadyClaimed();
                 }
 
+                // Update the token to the new one
                 token = inputTokens[inputClaim.tokenIndex];
+                // Reset bitsSet for the new token.
+                // 1 << bitPosition creates a number with only the bit at bitPosition set to 1
                 bitsSet = 1 << bitPosition; // set bit at given position
+                // Reset the amount for the new token
                 amount = inputClaim.amount;
             } else {
+                // If it's the same token as before, update bitsSet and amount
+                // bitsSet | (1 << bitPosition) sets the bit at bitPosition to 1, keeping other bits unchanged
                 bitsSet = bitsSet | (1 << bitPosition);
                 amount += inputClaim.amount;
             }
 
-            // Handles the last claim
+            // If this is the last claim, set the claims for the current token
             if (i == inputClaims.length - 1) {
                 if (!_setClaimed(token, amount, wordPosition, bitsSet))
                     revert AlreadyClaimed();
             }
 
+            // Create the Merkle leaf for this claim
             bytes32 leaf = keccak256(
                 abi.encodePacked(msg.sender, inputClaim.amount)
             );
 
+            // Get the Merkle root for this batch
             bytes32 root = distributions[token].roots[inputClaim.batchNumber];
 
+            // Verify the Merkle proof
             if (!MerkleProof.verify(inputClaim.proof, root, leaf))
                 revert InvalidProof();
 
+            // Transfer the claimed tokens to the user
             inputTokens[inputClaim.tokenIndex].transfer(
                 msg.sender,
                 inputClaim.amount
@@ -169,6 +183,8 @@ contract TheRewarderDistributor {
         uint256 currentWord = distributions[token].claims[msg.sender][
             wordPosition
         ];
+        console.log("currentWord", currentWord);
+        console.log("newBits", newBits);
         if ((currentWord & newBits) != 0) return false;
 
         // update state

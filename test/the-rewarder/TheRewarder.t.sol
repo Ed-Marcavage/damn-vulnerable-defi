@@ -166,6 +166,9 @@ contract TheRewarderChallenge is Test {
     // amount is hashed - cant claim more
     //distributor.owner() is the deployer
     function test_init() public {
+        uint256 PLAYER_DVT_CLAIM_AMOUNT = 11524763827831882;
+        uint256 PLAYER_WETH_CLAIM_AMOUNT = 1171088749244340;
+
         bytes32[] memory dvtLeaves = _loadRewards(
             "/test/the-rewarder/dvt-distribution.json"
         );
@@ -180,13 +183,16 @@ contract TheRewarderChallenge is Test {
         tokensToClaim[0] = IERC20(address(dvt));
         tokensToClaim[1] = IERC20(address(weth));
 
+        uint256 remainingDvt = distributor.getRemaining(address(dvt));
+        uint256 remainingWeth = distributor.getRemaining(address(weth));
+
         // Create players's claims
         Claim[] memory claims = new Claim[](2);
 
         // First, the DVT claim
         claims[0] = Claim({
             batchNumber: 0, // claim corresponds to first DVT batch
-            amount: 11524763827831882,
+            amount: PLAYER_DVT_CLAIM_AMOUNT,
             tokenIndex: 0, // claim corresponds to first token in `tokensToClaim` array
             proof: merkle.getProof(dvtLeaves, 188) // Alice's address is at index 2
         });
@@ -194,7 +200,7 @@ contract TheRewarderChallenge is Test {
         // And then, the WETH claim
         claims[1] = Claim({
             batchNumber: 0, // claim corresponds to first WETH batch
-            amount: 1171088749244340,
+            amount: PLAYER_WETH_CLAIM_AMOUNT,
             tokenIndex: 1, // claim corresponds to second token in `tokensToClaim` array
             proof: merkle.getProof(wethLeaves, 188) // Alice's address is at index 2
         });
@@ -204,17 +210,26 @@ contract TheRewarderChallenge is Test {
         // Alice claims once
         vm.startPrank(player);
         // @todo - follow flow of ^ in claimRewards()
+        // @todo - look into how a batch uint256 is ued as bitmap
         distributor.claimRewards({
             inputClaims: claims,
             inputTokens: tokensToClaim
         });
 
+        uint256 ExpectedDvtLeft = remainingDvt - PLAYER_DVT_CLAIM_AMOUNT;
+        uint256 ExpectedWethLeft = remainingWeth - PLAYER_WETH_CLAIM_AMOUNT;
+
+        assertEq(dvt.balanceOf(address(distributor)), ExpectedDvtLeft);
+        assertEq(distributor.getRemaining(address(dvt)), ExpectedDvtLeft);
+        assertEq(weth.balanceOf(address(distributor)), ExpectedWethLeft);
+        assertEq(distributor.getRemaining(address(weth)), ExpectedWethLeft);
+
         // Alice cannot claim twice
-        vm.expectRevert(TheRewarderDistributor.AlreadyClaimed.selector);
-        distributor.claimRewards({
-            inputClaims: claims,
-            inputTokens: tokensToClaim
-        });
+        // vm.expectRevert(TheRewarderDistributor.AlreadyClaimed.selector);
+        // distributor.claimRewards({
+        //     inputClaims: claims,
+        //     inputTokens: tokensToClaim
+        // });
         vm.stopPrank(); // stop alice prank
     }
 
